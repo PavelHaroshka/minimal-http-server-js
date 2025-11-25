@@ -1,4 +1,29 @@
-html
+doctype html
+html(lang="en")
   head
-    title #{title}
-  body #{body}
+    meta(charset="UTF-8")
+    link(rel="stylesheet", href="style.css")
+    title= title
+
+  body
+    .container
+      h1= title
+
+      p
+        | This page was 
+        strong rendered using the #{engine} template engine
+        | .
+
+      h3 Try the same page rendered using other engines:
+
+      nav
+        if links && links.length
+          each link in links
+            a(href=link.href)= link.label
+        else
+          em No links provided.
+
+      .footer
+        em Rendered on #{renderedAt}
+
+    script(src="script.js")

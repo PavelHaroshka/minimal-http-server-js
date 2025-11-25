@@ -18,7 +18,7 @@ module.exports = function (basePath, fileDir = "public") {
         return res
           .status(200)
           .headers({
-            "Content-Type": mime.lookup(fileContent),
+            "Content-Type": mime.lookup(filePath),
             "Content-Length": fileContent.length,
           })
           .body(fileContent)

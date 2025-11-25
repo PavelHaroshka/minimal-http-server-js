@@ -1,7 +1,7 @@
 const net = require("net");
 const parseRequest = require("./reqParser");
 const buildResponse = require("./resBuilder");
-const engine = require("./templateEngine");
+const { engine } = require("./templateEngine");
 
 module.exports = function () {
   const config = {

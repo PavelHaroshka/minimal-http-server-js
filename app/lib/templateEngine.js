@@ -42,4 +42,4 @@ function engine(templateEngine) {
   };
 }
 
-module.exports = engine;
+module.exports = { engine, defaultRenderStrategy };

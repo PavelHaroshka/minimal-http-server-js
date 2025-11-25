@@ -1,0 +1,37 @@
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="style.css" />
+    <title>{{title}}</title>
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>{{title}}</h1>
+
+      <p>
+        This page was
+        <strong>rendered using the {{engine}} template engine</strong>.
+      </p>
+
+      <h3>Try the same page rendered using other engines:</h3>
+      <nav>
+        {{#if links}}
+          {{#each links}}
+            <a href="{{this.href}}">{{this.label}}</a>
+          {{/each}}
+        {{else}}
+          <em>No links provided.</em>
+        {{/if}}
+      </nav>
+
+      <div class="footer">
+        <em>Rendered on {{renderedAt}}</em>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+
+</html>
