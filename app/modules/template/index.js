@@ -21,6 +21,7 @@ const ctx = (engineName) => ({
     { href: "/template/ejs", label: "View EJS Template Version" },
     { href: "/template/pug", label: "View Pug Template Version" },
     { href: "/template/hbs", label: "View Handlebars Template Version" },
+    { href: "/", label: "Back to Main" },
   ],
   renderedAt: new Date().toLocaleString(),
 });
