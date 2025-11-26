@@ -7,7 +7,8 @@ const hbs = require("handlebars");
 const Router = require("../../lib/router");
 const {
   defaultRenderStrategy: renderStrategy,
-} = require("../../lib/templateEngine");
+} = require("../../lib/templates");
+const { parseJSX, renderJSXNodes } = require("../../lib/jsxRender/parser");
 
 const templateRouter = new Router("/template");
 
@@ -69,6 +70,21 @@ templateRouter.get("/hbs", (req, res) => {
     templatePath,
     ctx("Handlebars")
   );
+
+  return res
+    .status(200)
+    .headers({
+      "Content-Type": "text/html",
+      "Content-Length": template.length,
+    })
+    .body(template)
+    .send();
+});
+
+// self
+templateRouter.get("/self", (req, res) => {
+  const jsx = `<div id="main">Hello <span>World</span></div>`;
+  const template = renderJSXNodes(parseJSX(jsx));
 
   return res
     .status(200)
