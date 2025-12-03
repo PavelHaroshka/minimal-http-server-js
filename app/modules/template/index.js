@@ -8,7 +8,7 @@ const Router = require("../../lib/router");
 const {
   defaultRenderStrategy: renderStrategy,
 } = require("../../lib/templates");
-const { parseJSX, renderJSXNodes } = require("../../lib/jsxRender/parser");
+const { JSX } = require("../../lib/jsxRender/engine");
 
 const templateRouter = new Router("/template");
 
@@ -22,6 +22,7 @@ const ctx = (engineName) => ({
     { href: "/template/ejs", label: "View EJS Template Version" },
     { href: "/template/pug", label: "View Pug Template Version" },
     { href: "/template/hbs", label: "View Handlebars Template Version" },
+    { href: "/template/jsx", label: "View JSX Template Version" },
     { href: "/", label: "Back to Main" },
   ],
   renderedAt: new Date().toLocaleString(),
@@ -81,10 +82,12 @@ templateRouter.get("/hbs", (req, res) => {
     .send();
 });
 
-// self
-templateRouter.get("/self", (req, res) => {
-  const jsx = `<div id="main">Hello <span>World</span></div>`;
-  const template = renderJSXNodes(parseJSX(jsx));
+templateRouter.get("/jsx", (req, res) => {
+  const templatePath = "jsx.jsx";
+  const template = renderStrategy(JSX, { templateDir })(
+    templatePath,
+    ctx("JSX")
+  );
 
   return res
     .status(200)

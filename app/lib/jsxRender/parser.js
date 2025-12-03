@@ -1,89 +1,248 @@
-const env = require("./env");
+const parseJSX = (tokens) => {
+  const root = [];
 
-const parseJSX = (input) => {
-  input = input.trim();
+  let i = 0;
+  const peek = (offset = 0) => tokens[i + offset];
+  const consume = () => tokens[i++];
+  const eof = () => i >= tokens.length;
 
-  // Self-closing tag: <tagName .../>
-  const selfClosingMatch = input.match(/^<(\w+)([^>]*)\/>$/);
-  if (selfClosingMatch) {
-    const [, tag, propsStr] = selfClosingMatch;
-    return createElement(tag, parseProps(propsStr));
-  }
+  const parse = {
+    // TAG NAME (null = fragment)
+    tagName() {
+      const token = peek();
 
-  // Normal tag: <tagName ...>children</tagName>
-  const tagMatch = input.match(/^<(\w+)([^>]*)>([\s\S]*)<\/\1>$/);
-  if (tagMatch) {
-    const [, tag, propsStr, childrenStr] = tagMatch;
-    const children = parseChildren(childrenStr);
-    return createElement(tag, parseProps(propsStr), ...children);
-  }
-
-  // Plain text node
-  return input;
-};
-
-const parseProps = (propsStr) => {
-  const props = {};
-  const regex = /(\w+)="([^"]*)"/g;
-  let match;
-  while ((match = regex.exec(propsStr)) !== null) {
-    props[match[1]] = match[2];
-  }
-  return Object.keys(props).length ? props : null;
-};
-
-const parseChildren = (str) => {
-  const children = [];
-  let rest = str.trim();
-
-  while (rest.length) {
-    // Match first tag
-    const tagMatch = rest.match(/^<(\w+)([^>]*)>([\s\S]*?)<\/\1>/);
-    const selfClosingMatch = rest.match(/^<(\w+)([^>]*)\/>/);
-
-    if (tagMatch) {
-      const [full, tag, propsStr, inner] = tagMatch;
-      children.push(
-        createElement(tag, parseProps(propsStr), ...parseChildren(inner))
-      );
-      rest = rest.slice(full.length).trim();
-    } else if (selfClosingMatch) {
-      const [full, tag, propsStr] = selfClosingMatch;
-      children.push(createElement(tag, parseProps(propsStr)));
-      rest = rest.slice(full.length).trim();
-    } else {
-      // Text node until next tag
-      const textMatch = rest.match(/^[^<]+/);
-      if (textMatch) {
-        children.push(textMatch[0]);
-        rest = rest.slice(textMatch[0].length).trim();
+      // Fragment: "<>"
+      if (token.type !== "identifier") {
+        return null; // fragment tag
       }
-    }
+
+      return consume().value;
+    },
+
+    // ATTRIBUTES
+    attributes() {
+      const attrs = [];
+
+      while (true) {
+        let token = peek();
+        if (!token) break;
+
+        if (token.type === "closeAngleBracket" || token.type === "slash") break;
+        if (token.type !== "identifier") break;
+
+        let name = consume().value;
+        let value = true; // boolean attribute
+
+        if (peek().type === "equal") {
+          consume(); // "="
+
+          let node = peek();
+          if (node.type === "string") {
+            value = consume().value;
+          } else if (node.type === "openCurlyBracket") {
+            value = this.expressionNode();
+          } else {
+            value = consume().value;
+          }
+        }
+
+        attrs.push({ name, value });
+      }
+
+      return attrs;
+    },
+
+    // CHECK FOR CLOSING TAG
+    isClosingTag(tagName) {
+      // Fragment close: </>
+      if (tagName === null) {
+        return (
+          peek().type === "openAngleBracket" &&
+          peek(1).type === "slash" &&
+          peek(2).type === "closeAngleBracket"
+        );
+      }
+
+      // Normal element close: </tag>
+      return (
+        peek().type === "openAngleBracket" &&
+        peek(1).type === "slash" &&
+        peek(2).type === "identifier" &&
+        peek(2).value === tagName
+      );
+    },
+
+    // CONSUME CLOSING TAG
+    consumeClosingTag(tagName) {
+      consume(); // <
+      consume(); // /
+
+      if (tagName === null) {
+        // Expect "</>"
+        const end = consume();
+        if (end.type !== "closeAngleBracket") {
+          throw new Error("Expected '</>' for fragment close");
+        }
+        return;
+      }
+
+      const id = consume(); // identifier
+      if (id.value !== tagName) {
+        throw new Error(
+          `Mismatched closing tag: expected </${tagName}> but got </${id.value}>`
+        );
+      }
+
+      const end = consume();
+      if (end.type !== "closeAngleBracket") {
+        throw new Error("Expected '>' after closing tag");
+      }
+    },
+
+    // TEXT NODE
+    textNode() {
+      let value = consume().value;
+      return { type: "textNode", value };
+    },
+
+    // FRAGMENT NODE
+    fragmentNode() {
+      const tagName = null;
+      const attributes = [];
+      const children = [];
+
+      while (!eof()) {
+        if (this.isClosingTag(null)) {
+          this.consumeClosingTag(null);
+          break;
+        }
+        children.push(this.node());
+      }
+
+      return { type: "elementNode", tagName, attributes, children };
+    },
+
+    // ELEMENT NODE
+    elementNode() {
+      consume(); // consume "<"
+
+      // FRAGMENT OPEN: <>
+      if (peek().type === "closeAngleBracket") {
+        consume(); // ">"
+        return this.fragmentNode();
+      }
+
+      let tagName = this.tagName();
+      let attributes = this.attributes();
+      let selfClosing = false;
+
+      // Detect "/>"
+      if (peek().type === "slash") {
+        consume();
+        if (peek().type == "closeAngleBracket") selfClosing = true;
+        consume();
+      } else {
+        consume(); // >
+      }
+
+      if (selfClosing) {
+        return {
+          type: "elementNode",
+          tagName,
+          attributes,
+          children: [],
+          selfClosing: true,
+        };
+      }
+
+      // Parse children
+      const children = [];
+      while (!eof()) {
+        if (this.isClosingTag(tagName)) {
+          this.consumeClosingTag(tagName);
+          break;
+        }
+        children.push(this.node());
+      }
+
+      return { type: "elementNode", tagName, attributes, children };
+    },
+
+    // EXPRESSION NODE (with JSX support)
+    expressionNode() {
+      consume(); // "{"
+
+      let depth = 1;
+      const parts = [];
+      let rawBuf = "";
+
+      const flushRaw = () => {
+        if (rawBuf.length > 0) {
+          parts.push({ type: "Raw", code: rawBuf });
+          rawBuf = "";
+        }
+      };
+
+      while (!eof()) {
+        const token = peek();
+
+        if (token.type === "openCurlyBracket") {
+          consume();
+          depth++;
+          rawBuf += "{";
+          continue;
+        }
+
+        if (token.type === "closeCurlyBracket") {
+          consume();
+          depth--;
+          if (depth === 0) break;
+          rawBuf += "}";
+          continue;
+        }
+
+        // Inline JSX: <Tag>
+        if (
+          token.type === "openAngleBracket" &&
+          peek(1) &&
+          (peek(1).type === "identifier" ||
+            peek(1).type === "closeAngleBracket") // support fragments here
+        ) {
+          flushRaw();
+          const jsxNode = this.elementNode();
+          parts.push({ type: "JSX", node: jsxNode });
+          continue;
+        }
+
+        const node = consume();
+        rawBuf += node.value != null ? node.value : "";
+      }
+
+      flushRaw();
+
+      return {
+        type: "Expression",
+        parts,
+      };
+    },
+
+    // GENERIC NODE
+    node() {
+      const token = peek();
+      if (!token) return null;
+
+      if (token.type === "openAngleBracket") return this.elementNode();
+      if (token.type === "openCurlyBracket") return this.expressionNode();
+      return this.textNode();
+    },
+  };
+
+  while (!eof()) {
+    const node = parse.node();
+    if (node) root.push(node);
   }
 
-  return children;
+  return root;
 };
 
-const createElement = (nodeName, attributes, ...args) => {
-  const children = args.length ? [].concat(...args) : null;
-  return { nodeName, attributes, children };
-};
-
-const renderJSXNodes = (node) => {
-  if (typeof node === "string") return env.createTextNode(node);
-
-  // create a node
-  let parent = env.createElement(node.nodeName);
-  // attach attributes
-  const attibutes = node.attributes || {};
-  Object.keys(attibutes).forEach((attribute) =>
-    parent.setAttribute(attribute, attibutes[attribute])
-  );
-  // build and append children
-  const children = node.children || [];
-  children.forEach((child) => parent.appendChild(renderJSXNodes(child)));
-
-  return parent.outerHTML;
-};
-
-module.exports = { parseJSX, renderJSXNodes };
+module.exports = { parseJSX };
